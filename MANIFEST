@@ -1,6 +1,3 @@
-Examples/portusage
-Examples/usergrep
-Examples/userkill
 MANIFEST
 Makefile.PL
 PortMaster.pm

@@ -1,9 +1,9 @@
-### PortMaster.pm
+### RAS::PortMaster.pm
 ### PERL 5 module for accessing a Livingston PortMaster
 #########################################################
 
-package PortMaster;
-$VERSION = "1.10";
+package RAS::PortMaster;
+$VERSION = "1.11";
 
 # The new method, of course
 sub new {
@@ -58,7 +58,8 @@ sub run_command {
 sub usergrep {
    my($confarray) = $_[0];
    my($username) = $_[1]; return unless $username;
-   my($output) = shift(&run_command($confarray,'sho ses'));
+   my(@foo) = &run_command($confarray,'sho ses');
+   my($output) = shift(@foo);
    my(@ports);
 
    foreach (@$output) {
@@ -71,7 +72,8 @@ sub usergrep {
 
 sub portusage {
    my($confarray) = $_[0];
-   my($output) = shift(&run_command($confarray,'sho ses'));
+   my(@foo) = &run_command($confarray,'sho ses');
+   my($output) = shift(@foo);
    my(@users);
    my($totalports); $totalports = 0;
 
@@ -88,7 +90,8 @@ sub portusage {
 sub userkill {
    my($confarray) = $_[0];
    my($username); $username = $_[1]; return unless $username;
-   my($ports) = shift(&usergrep($confarray,$username));
+   my(@foo) = &usergrep($confarray,$username);
+   my($ports) = shift(@foo);
    foreach (@$ports) { &run_command($confarray,"reset $_"); }
    return(@ports);
 }
@@ -102,7 +105,7 @@ __END__;
 
 RAS::PortMaster.pm - PERL Interface to Livingston PortMaster 2
 
-Version 1.00, November 25, 1999
+Version 1.11, November 25, 1999
 
 Gregor Mosheh (stigmata@blackangel.net)
 
@@ -215,6 +218,74 @@ This returns an array consisting of 2 items: The 1st element is the number of po
       print "Ports used: ", scalar(@people), "\n";
       print "Ports total: ", $ports, "\n";
 
+
+=head1 EXAMPLE PROGRAMS
+
+portusage.pl - Summarizes port usage on a bank of PMs
+
+use RAS::PortMaster;
+$used = $total = 0;
+foreach ('pm1.example.com','pm2.example.com','pm3.example.com') {
+   $foo = new RAS::PortMaster(
+      hostname => $_,
+      login => '!root',
+      password => 'mysecret'
+   );
+
+   local(@ports,$ports);
+   ($ports,@ports) = $foo->portusage;
+   $total += $ports;
+   $used += scalar(@ports);
+}
+
+print "$used out of $total ports are in use.\n";
+
+#####
+
+usergrep.pl - Locate a user on a bank of PMs
+
+($username) = @ARGV;
+die "Usage: $0 <username>\nFinds the specified user.\n" unless $username ;
+
+use RAS::PortMaster;
+
+foreach ('pm1.example.com','pm2.example.com','pm3.example.com') {
+   $foo = new PortMaster(
+      hostname => $_,
+      login => '!root',
+      password => 'mysecret'
+   );
+
+   @ports = $foo->usergrep($username);
+   (@ports) && print "Found user $username on $_ ports @ports\n";
+}
+
+#####
+
+userkill.pl - Kick a user off a bank of PMs
+
+($username) = @ARGV;
+die "Usage: $0 <username>\nDisconnects the specified user.\n" unless $username ;
+
+use RAS::PortMaster;
+
+foreach ('pm1.example.com','pm2.example.com','pm3.example.com') {
+   $foo = new PortMaster(
+      hostname => $_,
+      login => '!root',
+      password => 'mysecret'
+   );
+
+   @ports = $foo->userkill($username);
+   (@ports) && print "$_ : Killed ports @ports\n";
+}
+
+
+=head1 CHANGES IN THIS VERSION
+
+1.11     The package name got mangled when I zipped everything up, and was thus useless. This has been fixed. Sorry. Also moved the example programs into this document for easy availability. Also fixed an intermittent problem with PERL not liking my use of shift(&routine)
+
+1.00     First release, November 1999.
 
 =head1 BUGS
 
