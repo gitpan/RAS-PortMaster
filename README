@@ -1,5 +1,5 @@
-RAS::PortMaster
-Version 1.12, December 6, 1999
+RAS::PortMaster.pm
+Version 1.13, December 20, 1999
 Gregor Mosheh (stigmata@blackangel.net)
 
 
@@ -17,19 +17,16 @@ This module uses Jay Rogers' Net::Telnet module. If you don't have
 Net::Telnet, get it from CPAN or this module won't do much for you.
 
 Installation is easy:
-   perl Makefile.PL && make
-   make test
+   perl Makefile.PL && make && make test
    make install
-
-Read the output of "make test" to make sure it's sensical.
-No point running the test if you don't read the output...
-
-Check out the tests in test.pl and the examples in the 
-documentation for examples on how you'd want to use this module.
 
 
 DOCUMENTATION
 
 For more information, see the POD documentation in the module itself.
 Try "pod2text PortMaster.pm | more" or see the installed manpage.
+
+Check out the Examples section of the manpage for examples on how you'd 
+want to use this module.
+
 

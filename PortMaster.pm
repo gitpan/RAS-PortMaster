@@ -3,7 +3,7 @@
 #########################################################
 
 package RAS::PortMaster;
-$VERSION = "1.12";
+$VERSION = "1.13";
 
 # The new method, of course
 sub new {
@@ -16,6 +16,7 @@ sub new {
 
 sub printenv {
    my($confarray) = $_[0];
+   print "VERSION = $VERSION\n";
    while (($key,$value) = each(%$confarray)) { print "$key = $value\n"; }
 }
 
@@ -27,15 +28,22 @@ sub run_command {
 
    while ($command = shift) {
       $session = new Net::Telnet;
+      $session->errmode("return");
       $session->open($confarray->{hostname});
       $session->login($confarray->{login},$confarray->{password});
+      if ($session->errmsg) {
+         warn "RAS::PortMaster ERROR: ", $session->errmsg, "\n"; return();
+      }
       $session->print($command);
-      my(@output);
+
 
       local($afterprompt = 0);
       while (1) { # The $afterprompt workaround sucks. The PM sticks random
                   # newlines after pressing Enter at a prompt.
          local($line); $session->print(""); $line = $session->getline ;
+         if ($session->errmsg) {
+            warn "RAS::PortMaster ERROR: ", $session->errmsg; return();
+         }
          if ($line =~ /^\w+\>\s+/) { $session->print("quit"); $session->close; last; }
          if ($line =~ /^-- Press Return for More --/) { $afterprompt = 1; next; }
          if ($afterprompt && ($line =~ /^\s*$/)) { next; }
@@ -109,7 +117,7 @@ __END__;
 
 RAS::PortMaster.pm - PERL Interface to Livingston PortMaster 2
 
-Version 1.12, December 6, 1999
+Version 1.13, December 20, 1999
 
 Gregor Mosheh (stigmata@blackangel.net)
 
@@ -128,15 +136,15 @@ Installation is easy, thanks to MakeMaker:
 
 =item 1.
 
-perl Makefile.PL && make
-
-make install
-
-make test
+"perl Makefile.PL && make && make test"
 
 =item 2.
 
-Check out the tests and the EXAMPLES section of this document for examples on how you'd want to use this module.
+If the tests went well, do a "make install"
+
+=item 3.
+
+Check out the EXAMPLES section of this document for examples on how you'd want to use this module.
 
 =back
 
@@ -289,7 +297,9 @@ foreach ('pm1.example.com','pm2.example.com','pm3.example.com') {
 
 =head1 CHANGES IN THIS VERSION
 
-1.12     Bug fixes. Optimized userkill() for better performance. Added test suite.
+1.13     Added a test suite. Fixed some documentation errors. Added some error handling.
+
+1.12     Bug fixes. Optimized userkill() for better performance.
 
 1.11     The package name got mangled when I zipped everything up, and was thus useless. This has been fixed. Sorry. Also moved the example programs into this document for easy availability. Also fixed an intermittent problem with PERL not liking my use of shift(&routine)
 
@@ -297,9 +307,9 @@ foreach ('pm1.example.com','pm2.example.com','pm3.example.com') {
 
 =head1 BUGS
 
-This is my first try at doing PERL 5 stuff, having been satisfied for so many years with using only the PERL 4 features. Though this module seems to work without any problems, the code is probably kinda weak in places and could stand optimization. Any suggestions will be appreciated and credit will be given.
+Since we use this for port usage monitoring, new functions will be added slowly on an as-needed basis. If you need some specific functionality let me know and I'll see what I can do. If you write an addition for this, please send it in and I'll incororate it and give credit.
 
-I work for an ISP and we use this for port usage monitoring, so other aspects have been put off until later. If you need such code, please ask and I'll work on it in my spare time. Alternately, you can write it yourself and send it in and I'll gladly incorporate it and give credit. And there's always the run_command method.
+I make some assumptions about router prompts based on what I have on hand for experimentation. If I make an assumption that doesn't apply to you (e.g. all prompts are /^[a-zA-Z0-9]+\>\s+$/) then it can cause two problems: pattern match timed out or a hang when any functions are used. A pattern match timeout can occur because of a bad password or a bad prompt. A hang is likely caused by a bad prompt. Check the regexps in the loop within run_command, and make sure your prompt fits this regex. If not, either fix the regex and/or (even better) PLEASE send me some details on your prompt and what commands you used to set your prompt. If you have several routers with the same login/password, make sure you're pointing to the right one. A Livingston PM, for example, has a different prompt than a HiPerARC - if you accidentally point to a ARC using RAS::PortMaster, you'll likely be able to log in, but run_command will never exit, resulting in a hang.
 
 
 =head1 LICENSE AND WARRANTY
