@@ -3,23 +3,23 @@
 #########################################################
 
 package RAS::PortMaster;
-$VERSION = "1.15";
+$RAS::PortMaster::VERSION = "1.16";
 
-use strict "subs"; use strict "refs";
+use strict;
 
 # This uses Net::Telnet to connect to the RAS
 use Net::Telnet ;
 
 # The name $ras will be used consistently as the
-# reference to the RAS::HiPerARC object we're handling
+# reference to the RAS::PortMaster object we're handling
 
 
 # The constructor method, of course
 sub new {
    my($class) = shift ;
    my($ras) = {} ;
-   %$ras = @_ ;
-   $ras->{'VERSION'} = $VERSION;
+   %{$ras} = @_ ;
+   $ras->{'VERSION'} = $RAS::PortMaster::VERSION;
    bless($ras);
 }
 
@@ -28,7 +28,7 @@ sub new {
 # the entire contents of %$ras
 sub printenv {
    my($ras) = shift;
-   while (($key,$value) = each(%$ras)) { print "$key = $value\n"; }
+   while (my($key,$value) = each(%{$ras})) { print "$key = $value\n"; }
 }
 
 
@@ -38,36 +38,36 @@ sub run_command {
    my($ras) = shift;
    my(@returnlist);
 
-   while ($command = shift) {
+   while (my $command = shift) {
       my($session) = new Net::Telnet;
       $session->errmode("return");
-      $session->open($ras->{hostname});
-      if ($session->errmsg) {
-         warn "ERROR: ",ref($ras),' - ',$session->errmsg,"\n"; return(); }
-      $session->login($ras->{login},$ras->{password});
-      if ($session->errmsg) {
-         warn "ERROR: ",ref($ras),' - ',$session->errmsg,"\n"; return(); }
-      $session->print("\n"); $session->waitfor('/\w+>\s+$/');
-      if ($session->errmsg) {
-         warn "ERROR: ",ref($ras),' - ',$session->errmsg,"\n"; return(); }
-      $session->print($command);
-      my(@output);
 
-      my($afterprompt);
-      while (1) { # The $afterprompt workaround sucks. The PM sticks random
-                  # newlines after pressing Enter at a prompt.
-         $session->print(""); my($line) = $session->getline ;
+      # connect
+      $session->open($ras->{'hostname'});
+      if ($session->errmsg) {
+         warn "ERROR: ",ref($ras),' - ',$session->errmsg,"\n"; return(); }
+      # login
+      $session->login($ras->{'login'},$ras->{'password'});
+      if ($session->errmsg) {
+         warn "ERROR: ",ref($ras),' - ',$session->errmsg,"\n"; return(); }
+      # we got logged in, so send the command
+      $session->print($command);
+      $session->print(""); # for some reason, this is necessary to make the prompt appear after the output
+
+      my(@output);
+      while (1) {
+         my($line) = $session->getline;
          if ($session->errmsg) {
             warn "ERROR: ",ref($ras),' - ',$session->errmsg,"\n"; return(); }
-         if ($line =~ /^\w+\>\s+/) { $session->print("quit"); $session->close; last; }
-         if ($line =~ /^-- Press Return for More --/) { $afterprompt = 1; next; }
-         if ($afterprompt && ($line =~ /^\s*$/)) { next; }
-         $afterprompt = 0;
+         if ($line =~ /^\s*$/) { next; }
+         if ($line =~ /^-- Press Return for More --\s+$/) { $session->print(""); next; }
+         if ($line =~ /^[\w\.\-]+\>\s+$/) { $session->print("quit"); $session->close; last; }
          push(@output, $line);
       }
 
-      # Net::Telnet to the PM leaves the echoed command and a blank line
-      shift(@output); shift(@output);
+
+      # Net::Telnet to the PM leaves the echoed command at the start
+      shift(@output);
       push(@returnlist, \@output);
    } # end of shifting commands
 
@@ -119,6 +119,7 @@ sub userkill {
    my(@ports) = $ras->usergrep($username);
    return('') unless @ports;
 
+   my @resetcmd = ();
    foreach (@ports) { push(@resetcmd,"reset $_"); }
    $ras->run_command(@resetcmd);
 
@@ -184,6 +185,14 @@ Call the new method while supplying the  "hostname", "login", and "password" has
       );
 
 Since there's no sense in dynamically changing the hostname, password, etc. no methods are supplied for modifying them and they must be supplied statically to the constructor. No error will be generated if anything is left out, though it's likely that your program won't get far without supplying a proper hostname and password...
+
+
+=item VERSION
+
+This is an attribute, not a method, containing a string of the module version:
+
+   Example:
+      printf("Module version %s", $foo->{'VERSION'});
 
 
 =item printenv
@@ -315,6 +324,8 @@ foreach ('pm1.example.com','pm2.example.com','pm3.example.com') {
 
 
 =head1 CHANGES IN THIS VERSION
+
+1.16     Cleaned up that stupid $afterprompt code, and made the module work with prompt containing . and - characters. In my testing, the module now seems to work with PortMaster 3. I hope it still works with the PM2, though I don't see why not.
 
 1.15     Cleaned up the code significantly. Fixed the prompt code to avoid infinite loops in the case of a prompt mismatch - it now times out appropriately.
 
