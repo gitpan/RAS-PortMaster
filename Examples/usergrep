@@ -1,0 +1,17 @@
+#!/usr/bin/perl
+
+($username) = @ARGV;
+die "Usage: $0 <username>\nFinds the specified user.\n" unless $username ;
+
+use RAS::PortMaster;
+
+foreach ('pm1.example.com','pm2.example.com','pm3.example.com') {
+   $foo = new PortMaster(
+      hostname => $_,
+      login => '!root',
+      password => 'mysecret'
+   );
+
+   @ports = $foo->usergrep($username);
+   (@ports) && print "Found user $username on $_ ports @ports\n";
+}
