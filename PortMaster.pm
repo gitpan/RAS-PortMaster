@@ -3,7 +3,7 @@
 #########################################################
 
 package RAS::PortMaster;
-$VERSION = "1.13";
+$VERSION = "1.14";
 
 # The new method, of course
 sub new {
@@ -27,6 +27,7 @@ sub run_command {
    my($session,@returnlist,$command);
 
    while ($command = shift) {
+      my(@output);
       $session = new Net::Telnet;
       $session->errmode("return");
       $session->open($confarray->{hostname});
@@ -117,7 +118,7 @@ __END__;
 
 RAS::PortMaster.pm - PERL Interface to Livingston PortMaster 2
 
-Version 1.13, December 20, 1999
+Version 1.14, December 21, 1999
 
 Gregor Mosheh (stigmata@blackangel.net)
 
@@ -296,6 +297,8 @@ foreach ('pm1.example.com','pm2.example.com','pm3.example.com') {
 
 
 =head1 CHANGES IN THIS VERSION
+
+1.14     Fixed a leak in run_command  I swear I test this stuff before I upload it, really!
 
 1.13     Added a test suite. Fixed some documentation errors. Added some error handling.
 
