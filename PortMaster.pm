@@ -3,7 +3,7 @@
 #########################################################
 
 package RAS::PortMaster;
-$VERSION = "1.11";
+$VERSION = "1.12";
 
 # The new method, of course
 sub new {
@@ -23,13 +23,14 @@ sub printenv {
 sub run_command {
    my($confarray) = shift;
    use Net::Telnet ;
-   my($session, @output,$command);
+   my($session,@returnlist,$command);
 
    while ($command = shift) {
       $session = new Net::Telnet;
       $session->open($confarray->{hostname});
       $session->login($confarray->{login},$confarray->{password});
       $session->print($command);
+      my(@output);
 
       local($afterprompt = 0);
       while (1) { # The $afterprompt workaround sucks. The PM sticks random
@@ -90,9 +91,12 @@ sub portusage {
 sub userkill {
    my($confarray) = $_[0];
    my($username); $username = $_[1]; return unless $username;
-   my(@foo) = &usergrep($confarray,$username);
-   my($ports) = shift(@foo);
-   foreach (@$ports) { &run_command($confarray,"reset $_"); }
+   my(@ports) = &usergrep($confarray,$username);
+   return() unless @ports;
+
+   foreach (@ports) { push(@resetcmd,"reset $_"); }
+   &run_command($confarray,@resetcmd);
+
    return(@ports);
 }
 
@@ -105,22 +109,18 @@ __END__;
 
 RAS::PortMaster.pm - PERL Interface to Livingston PortMaster 2
 
-Version 1.11, November 25, 1999
+Version 1.12, December 6, 1999
 
 Gregor Mosheh (stigmata@blackangel.net)
 
 =head1 SYNOPSIS
 
-B<RAS::PortMaster> is a PERL 5 module for interfacing with a Livingston 
-PortMaster remote access server. Using this module, one can very easily 
-construct programs to find a particular user in a bank of PMs, disconnect 
-users, get usage statistics, or execute arbitrary commands on a PM.
+B<RAS::PortMaster> is a PERL 5 module for interfacing with a Livingston PortMaster remote access server. Using this module, one can very easily construct programs to find a particular user in a bank of PMs, disconnect users, get usage statistics, or execute arbitrary commands on a PM.
 
 
 =head1 PREREQUISITES AND INSTALLATION
 
-This module uses Jay Rogers' B<Net::Telnet module>. If you don't have 
-B<Net::Telnet>, get it from CPAN or this module won't do much for you.
+This module uses Jay Rogers' B<Net::Telnet module>. If you don't have B<Net::Telnet>, get it from CPAN or this module won't do much for you.
 
 Installation is easy, thanks to MakeMaker:
 
@@ -128,11 +128,15 @@ Installation is easy, thanks to MakeMaker:
 
 =item 1.
 
-"perl Makefile.PL && make && make install"
+perl Makefile.PL && make
+
+make install
+
+make test
 
 =item 2.
 
-Check out the Example directory for examples on how you'd want to use this module.
+Check out the tests and the EXAMPLES section of this document for examples on how you'd want to use this module.
 
 =back
 
@@ -148,7 +152,7 @@ Call the new method while supplying the  "hostname", "login", and "password" has
 
    Example:
       use RAS::PortMaster;
-      $foo = new PortMaster(
+      $foo = new RAS::PortMaster(
          hostname => 'dialup1.example.com',
          login => '!root',
          password => 'mysecret'
@@ -193,7 +197,9 @@ Supply a username as an argument, and usergrep will return an array of ports on 
 
 =item userkill
 
-This does a usergrep, but with a twist: it disconnects the user by resetting the modem on which they're connected. Like usergrep, it returns an array of ports to which the user was connected before they were reset.  This is safe to use if the specified user is not logged in.  Also, you can userkill a username of "-" to reset all idle modems or "PPP" all users who are still negotiating a connection.
+This does a usergrep, but with a twist: it disconnects the user by resetting the modem on which they're connected. Like usergrep, it returns an array of ports to which the user was connected before they were reset.  This is safe to use if the specified user is not logged in.
+
+Because the PortMaster shows even ports that are not in use, you can userkill a username of "-" to reset all idle modems or "PPP" all users who are still negotiating a connection.
 
    Examples:
       @foo = $foo->userkill('gregor');
@@ -205,11 +211,11 @@ This does a usergrep, but with a twist: it disconnects the user by resetting the
 
 =item portusage
 
-This returns an array consisting of 2 items: The 1st element is the number of ports. The rest is a list of users who are currently online.
+This returns an array consisting of 2 parts: The 1st element is the number of ports. The rest is a list of users who are currently online.
 
    Examples:
-      ($ports,@people) = $foo->portusage;
-      print "There are $ports total ports.\n";
+      @people = $foo->portusage;
+      print "There are ", shift(@people), " total ports.\n";
       print "There are ", scalar(@people), "people online.\n";
       print "They are: @people\n";
 
@@ -250,7 +256,7 @@ die "Usage: $0 <username>\nFinds the specified user.\n" unless $username ;
 use RAS::PortMaster;
 
 foreach ('pm1.example.com','pm2.example.com','pm3.example.com') {
-   $foo = new PortMaster(
+   $foo = new RAS::PortMaster(
       hostname => $_,
       login => '!root',
       password => 'mysecret'
@@ -270,7 +276,7 @@ die "Usage: $0 <username>\nDisconnects the specified user.\n" unless $username ;
 use RAS::PortMaster;
 
 foreach ('pm1.example.com','pm2.example.com','pm3.example.com') {
-   $foo = new PortMaster(
+   $foo = new RAS::PortMaster(
       hostname => $_,
       login => '!root',
       password => 'mysecret'
@@ -283,6 +289,8 @@ foreach ('pm1.example.com','pm2.example.com','pm3.example.com') {
 
 =head1 CHANGES IN THIS VERSION
 
+1.12     Bug fixes. Optimized userkill() for better performance. Added test suite.
+
 1.11     The package name got mangled when I zipped everything up, and was thus useless. This has been fixed. Sorry. Also moved the example programs into this document for easy availability. Also fixed an intermittent problem with PERL not liking my use of shift(&routine)
 
 1.00     First release, November 1999.
@@ -291,7 +299,7 @@ foreach ('pm1.example.com','pm2.example.com','pm3.example.com') {
 
 This is my first try at doing PERL 5 stuff, having been satisfied for so many years with using only the PERL 4 features. Though this module seems to work without any problems, the code is probably kinda weak in places and could stand optimization. Any suggestions will be appreciated and credit will be given.
 
-I work for an ISP where all user management is done via RADIUS. As such, we have no use for the user management functions of the PM. If you need such code, I may work on it in my spare time. Alternately, you can write it yourself and send it in and I'll gladly incorporate it and give credit. And there's always the run_command method.
+I work for an ISP and we use this for port usage monitoring, so other aspects have been put off until later. If you need such code, please ask and I'll work on it in my spare time. Alternately, you can write it yourself and send it in and I'll gladly incorporate it and give credit. And there's always the run_command method.
 
 
 =head1 LICENSE AND WARRANTY
