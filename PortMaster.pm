@@ -3,48 +3,62 @@
 #########################################################
 
 package RAS::PortMaster;
-$VERSION = "1.14";
+$VERSION = "1.15";
 
-# The new method, of course
+use strict "subs"; use strict "refs";
+
+# This uses Net::Telnet to connect to the RAS
+use Net::Telnet ;
+
+# The name $ras will be used consistently as the
+# reference to the RAS::HiPerARC object we're handling
+
+
+# The constructor method, of course
 sub new {
-   my $class = shift ;
-   my $confarray = {} ;
-   %$confarray = @_ ;
-   bless $confarray ;
+   my($class) = shift ;
+   my($ras) = {} ;
+   %$ras = @_ ;
+   $ras->{'VERSION'} = $VERSION;
+   bless($ras);
 }
 
 
+# for debugging - printenv() prints to STDERR
+# the entire contents of %$ras
 sub printenv {
-   my($confarray) = $_[0];
-   print "VERSION = $VERSION\n";
-   while (($key,$value) = each(%$confarray)) { print "$key = $value\n"; }
+   my($ras) = shift;
+   while (($key,$value) = each(%$ras)) { print "$key = $value\n"; }
 }
 
 
+# This runs the specified commands on the router and returns
+# a list of refs to arrays containing the commands' output
 sub run_command {
-   my($confarray) = shift;
-   use Net::Telnet ;
-   my($session,@returnlist,$command);
+   my($ras) = shift;
+   my(@returnlist);
 
    while ($command = shift) {
-      my(@output);
-      $session = new Net::Telnet;
+      my($session) = new Net::Telnet;
       $session->errmode("return");
-      $session->open($confarray->{hostname});
-      $session->login($confarray->{login},$confarray->{password});
+      $session->open($ras->{hostname});
       if ($session->errmsg) {
-         warn "RAS::PortMaster ERROR: ", $session->errmsg, "\n"; return();
-      }
+         warn "ERROR: ",ref($ras),' - ',$session->errmsg,"\n"; return(); }
+      $session->login($ras->{login},$ras->{password});
+      if ($session->errmsg) {
+         warn "ERROR: ",ref($ras),' - ',$session->errmsg,"\n"; return(); }
+      $session->print("\n"); $session->waitfor('/\w+>\s+$/');
+      if ($session->errmsg) {
+         warn "ERROR: ",ref($ras),' - ',$session->errmsg,"\n"; return(); }
       $session->print($command);
+      my(@output);
 
-
-      local($afterprompt = 0);
+      my($afterprompt);
       while (1) { # The $afterprompt workaround sucks. The PM sticks random
                   # newlines after pressing Enter at a prompt.
-         local($line); $session->print(""); $line = $session->getline ;
+         $session->print(""); my($line) = $session->getline ;
          if ($session->errmsg) {
-            warn "RAS::PortMaster ERROR: ", $session->errmsg; return();
-         }
+            warn "ERROR: ",ref($ras),' - ',$session->errmsg,"\n"; return(); }
          if ($line =~ /^\w+\>\s+/) { $session->print("quit"); $session->close; last; }
          if ($line =~ /^-- Press Return for More --/) { $afterprompt = 1; next; }
          if ($afterprompt && ($line =~ /^\s*$/)) { next; }
@@ -52,7 +66,7 @@ sub run_command {
          push(@output, $line);
       }
 
-      # Net::Telnet to the PM leaves the echoed command and a line
+      # Net::Telnet to the PM leaves the echoed command and a blank line
       shift(@output); shift(@output);
       push(@returnlist, \@output);
    } # end of shifting commands
@@ -65,11 +79,12 @@ sub run_command {
 } # end of run_command
 
 
+# usergrep() - takes a username and returns an array of
+# ports on which the user was found
 sub usergrep {
-   my($confarray) = $_[0];
-   my($username) = $_[1]; return unless $username;
-   my(@foo) = &run_command($confarray,'sho ses');
-   my($output) = shift(@foo);
+   my($ras) = shift;
+   my($username) = shift; return() unless $username;
+   my($output) = $ras->run_command('sho ses');
    my(@ports);
 
    foreach (@$output) {
@@ -80,12 +95,12 @@ sub usergrep {
 }
 
 
+# portusage() returns a list: # of ports, list of users
 sub portusage {
-   my($confarray) = $_[0];
-   my(@foo) = &run_command($confarray,'sho ses');
-   my($output) = shift(@foo);
-   my(@users);
-   my($totalports); $totalports = 0;
+   my($ras) = shift;
+   my($output) = $ras->run_command('sho ses');
+   my(@users,$totalports);
+   $totalports = 0;
 
    foreach (@$output) {
       next unless /^S\d+\s+(\S+)\s+/;
@@ -97,14 +112,15 @@ sub portusage {
 }
 
 
+# This does a usergrep() and then disconnects the specified user
 sub userkill {
-   my($confarray) = $_[0];
-   my($username); $username = $_[1]; return unless $username;
-   my(@ports) = &usergrep($confarray,$username);
-   return() unless @ports;
+   my($ras) = shift;
+   my($username); $username = shift; return() unless $username;
+   my(@ports) = $ras->usergrep($username);
+   return('') unless @ports;
 
    foreach (@ports) { push(@resetcmd,"reset $_"); }
-   &run_command($confarray,@resetcmd);
+   $ras->run_command(@resetcmd);
 
    return(@ports);
 }
@@ -118,7 +134,7 @@ __END__;
 
 RAS::PortMaster.pm - PERL Interface to Livingston PortMaster 2
 
-Version 1.14, December 21, 1999
+Version 1.15, January 17, 2000
 
 Gregor Mosheh (stigmata@blackangel.net)
 
@@ -167,6 +183,8 @@ Call the new method while supplying the  "hostname", "login", and "password" has
          password => 'mysecret'
       );
 
+Since there's no sense in dynamically changing the hostname, password, etc. no methods are supplied for modifying them and they must be supplied statically to the constructor. No error will be generated if anything is left out, though it's likely that your program won't get far without supplying a proper hostname and password...
+
 
 =item printenv
 
@@ -178,7 +196,7 @@ This is for debugging only. It prints to STDOUT a list of its configuration hash
 
 =item run_command
 
-This takes a list of commands to be executed on the PortMaster, connects to the PM and executes the commands, and returns a list of references to arrays containg the text of each command's output. 
+This takes a list of commands to be executed on the PortMaster, executes the commands, and returns a list of references to arrays containg the text of each command's output. 
 
 Repeat: It doesn't return an array, it returns an array of references to arrays. Each array contains the text output of each command. Think of it as an array-enhanced version of PERL's `backtick` operator.
 
@@ -197,7 +215,7 @@ Repeat: It doesn't return an array, it returns an array of references to arrays.
 
 =item usergrep
 
-Supply a username as an argument, and usergrep will return an array of ports on which that user was found. Internally, this does a run_command("sho ses") and parses the output.
+Supply a username as an argument, and usergrep will return an array of ports on which that user was found (or an empty array if they weren't found). A undefined value is returned if no username was supplied. Internally, this does a run_command("sho ses") and parses the output.
 
    Example:
       @ports = $foo->usergrep('gregor');
@@ -206,9 +224,9 @@ Supply a username as an argument, and usergrep will return an array of ports on 
 
 =item userkill
 
-This does a usergrep, but with a twist: it disconnects the user by resetting the modem on which they're connected. Like usergrep, it returns an array of ports to which the user was connected before they were reset.  This is safe to use if the specified user is not logged in.
+This does a usergrep, but with a twist: it disconnects the user by resetting the modem on which they're connected. Like usergrep, it returns an array of ports to which the user was connected before they were reset (or an empty array if they weren't found). An undefined value is returned if no username was supplied.
 
-Because the PortMaster shows even ports that are not in use, you can userkill a username of "-" to reset all idle modems or "PPP" all users who are still negotiating a connection.
+Because the PortMaster shows even ports that are not in use and shows the username as '-', you can userkill a username of "-" to reset all idle modems.
 
    Examples:
       @foo = $foo->userkill('gregor');
@@ -298,21 +316,23 @@ foreach ('pm1.example.com','pm2.example.com','pm3.example.com') {
 
 =head1 CHANGES IN THIS VERSION
 
-1.14     Fixed a leak in run_command  I swear I test this stuff before I upload it, really!
+1.15     Cleaned up the code significantly. Fixed the prompt code to avoid infinite loops in the case of a prompt mismatch - it now times out appropriately.
+
+1.14     Fixed a leak in run_command. I swear I test this stuff before I upload it, really!
 
 1.13     Added a test suite. Fixed some documentation errors. Added some error handling.
 
 1.12     Bug fixes. Optimized userkill() for better performance.
 
-1.11     The package name got mangled when I zipped everything up, and was thus useless. This has been fixed. Sorry. Also moved the example programs into this document for easy availability. Also fixed an intermittent problem with PERL not liking my use of shift(&routine)
+1.11     The package name got mangled when I zipped everything up, and was thus useless. This has been fixed. Sorry. Also moved the example programs into this document for easy availability. Also fixed an intermittent problem with PERL not liking my use of shift() on a routine call.
 
 1.00     First release, November 1999.
 
 =head1 BUGS
 
-Since we use this for port usage monitoring, new functions will be added slowly on an as-needed basis. If you need some specific functionality let me know and I'll see what I can do. If you write an addition for this, please send it in and I'll incororate it and give credit.
+The set of supplied functions is a bit bare. Since we use this for port usage monitoring, new functions will be added slowly on an as-needed basis. If you need some specific functionality let me know and I'll see what I can do. If you write an addition for this, please send it in and I'll incororate it and give credit.
 
-I make some assumptions about router prompts based on what I have on hand for experimentation. If I make an assumption that doesn't apply to you (e.g. all prompts are /^[a-zA-Z0-9]+\>\s+$/) then it can cause two problems: pattern match timed out or a hang when any functions are used. A pattern match timeout can occur because of a bad password or a bad prompt. A hang is likely caused by a bad prompt. Check the regexps in the loop within run_command, and make sure your prompt fits this regex. If not, either fix the regex and/or (even better) PLEASE send me some details on your prompt and what commands you used to set your prompt. If you have several routers with the same login/password, make sure you're pointing to the right one. A Livingston PM, for example, has a different prompt than a HiPerARC - if you accidentally point to a ARC using RAS::PortMaster, you'll likely be able to log in, but run_command will never exit, resulting in a hang.
+I make some assumptions about router prompts based on what I have on hand for experimentation. If I make an assumption that doesn't apply to you (e.g. all prompts are /^\w+\>\s+/) then you could get "pattern match timeout" errors. If this happens, you may be using the wrong RAS module to connect the the router (e.g. don't use RAS::PortMaster to connect to a Cisco AS5200). Otherwise, check the regexps in the loop within run_command, and make sure your prompt fits this regex. If not, either fix the regex and/or (even better) PLEASE send me some details on your prompt and what commands you used to set your prompt.
 
 
 =head1 LICENSE AND WARRANTY
